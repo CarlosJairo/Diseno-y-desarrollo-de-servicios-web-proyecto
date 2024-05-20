@@ -19,7 +19,7 @@ const clienteSchema = mongoose.Schema({
     required: true,
   },
   fechaNacimiento: {
-    type: Date,
+    type: String,
     required: true,
   },
   roles: {
