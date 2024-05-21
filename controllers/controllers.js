@@ -2,7 +2,7 @@ import Cita from "../models/Cita.js";
 import Cliente from "../models/Cliente.js";
 import Pago from "../models/Pago.js";
 import Peluqueria from "../models/Peluqueria.js";
-import { Empleado } from "../models/Empleado.js";
+import { Empleado, Hora, Horario, Servicio } from "../models/Empleado.js";
 import { Types } from "mongoose";
 
 async function registrarCliente(req, res) {
@@ -100,6 +100,81 @@ async function obtenerPeluqueria(req, res) {
   }
 }
 
+const registrarEmpleado = async (req, res) => {
+  try {
+    const { peluqueriaId } = req.params;
+
+    const {
+      especialidad,
+      descripcion,
+      clienteId,
+      fechaIngreso,
+      numIdentificacion,
+      contactoEmergencia,
+      salarioBase,
+      direccion,
+      servicios,
+      horarios,
+    } = req.body;
+
+    // Crear los servicios
+    const servicioIds = await Promise.all(
+      servicios.map(async (servicio) => {
+        const newServicio = new Servicio(servicio);
+        await newServicio.save();
+        return newServicio._id;
+      }),
+    );
+
+    // Crear los horarios y las horas
+    const horarioIds = await Promise.all(
+      horarios.map(async (horario) => {
+        const horaIds = await Promise.all(
+          horario.horas.map(async (hora) => {
+            const newHora = new Hora(hora);
+            await newHora.save();
+            return newHora._id;
+          }),
+        );
+        const newHorario = new Horario({
+          fecha: horario.fecha,
+          horas: horaIds,
+        });
+        await newHorario.save();
+        return newHorario._id;
+      }),
+    );
+
+    // Crear el empleado
+    const nuevoEmpleado = new Empleado({
+      especialidad,
+      descripcion,
+      peluqueriaId: Types.ObjectId.createFromHexString(peluqueriaId),
+      clienteId: Types.ObjectId.createFromHexString(clienteId),
+      fechaIngreso: fechaIngreso,
+      numIdentificacion,
+      contactoEmergencia,
+      salarioBase,
+      direccion,
+      servicios: servicioIds,
+      horarios: horarioIds,
+    });
+
+    const data = await nuevoEmpleado.save();
+
+    res.status(201).json({
+      success: true,
+      message: "Empleado registrado exitosamente",
+      data,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 async function listarEmpleados(req, res) {
   try {
     const { peluqueriaId } = req.params;
@@ -108,7 +183,17 @@ async function listarEmpleados(req, res) {
 
     const empleados = await Empleado.find({
       peluqueriaId: result,
-    });
+    }).populate("clienteId");
+
+    // .populate("clienteId")
+    // .populate("servicios")
+    // .populate({
+    //   path: "horarios",
+    //   populate: {
+    //     path: "horas",
+    //     model: "Hora",
+    //   },
+    // });
 
     res.json(empleados);
   } catch (err) {
@@ -119,9 +204,18 @@ async function listarEmpleados(req, res) {
 async function obtenerEmpleado(req, res) {
   try {
     const { empleadoId } = req.params;
-    const empleadoInfo = await Empleado.findOne({ _id: empleadoId }).populate(
-      "servicios",
-    );
+    const empleadoInfo = await Empleado.findOne({ _id: empleadoId })
+      .populate("clienteId")
+      .populate("servicios")
+      .populate({
+        path: "horarios",
+        populate: {
+          path: "horas",
+          model: "Hora",
+        },
+      });
+    // .populate("servicios")
+    // .populate("clienteId");
     res.json(empleadoInfo);
   } catch (err) {
     res.status(500).json({ err: true, message: err.message });
@@ -131,7 +225,9 @@ async function obtenerEmpleado(req, res) {
 async function serviciosEmpleado(req, res) {
   try {
     const { empleadoId } = req.params;
-    const empleadoInfo = await Empleado.findOne({ _id: empleadoId });
+    const empleadoInfo = await Empleado.findOne({ _id: empleadoId }).populate(
+      "servicios",
+    );
     res.json(empleadoInfo.servicios);
   } catch (err) {
     res.status(500).json({ err: true, message: err.message });
@@ -153,7 +249,11 @@ async function generarCita(req, res) {
     const cita = Cita(req.body);
     const data = await cita.save(cita);
 
-    res.json({ err: false, message: "Cita generarda con exito", data: data });
+    res.json({
+      err: false,
+      message: "La cita se ha generado - sin pagar",
+      data: data,
+    });
   } catch (err) {
     res.status(500).json({ err: true, message: err.message });
   }
@@ -161,10 +261,30 @@ async function generarCita(req, res) {
 
 async function pagarCita(req, res) {
   try {
-    const pago = Pago(req.body);
+    const { citaId, monto, fecha, metodoPago, horaId } = req.body;
+
+    const pago = Pago({ citaId, monto, fecha, metodoPago });
     const data = await pago.save(pago);
 
-    res.json({ err: false, message: "Cita generarda con exito", data: data });
+    const cita = await Cita.findByIdAndUpdate(
+      citaId,
+      { pagada: true },
+      { new: true },
+    );
+
+    const hora = await Hora.findByIdAndUpdate(
+      horaId,
+      { libre: false },
+      { new: true },
+    );
+
+    res.json({
+      err: false,
+      message: "Cita generarda con exito",
+      hora,
+      data,
+      cita,
+    });
   } catch (err) {
     res.status(500).json({ err: true, message: err.message });
   }
@@ -174,9 +294,17 @@ async function listarCitasPendientes(req, res) {
   try {
     const { clienteId } = req.params;
 
-    const citasPendientes = await Cita.find({ clienteId, estado: "pendiente" })
-      .populate("empleadoId")
-      .populate("servicios");
+    const citasPendientes = await Cita.findOne({
+      clienteId,
+      estado: "pendiente",
+    })
+      .populate({
+        path: "empleadoId",
+        populate: "clienteId",
+      })
+      .populate("servicios")
+      .populate("horarioId")
+      .populate("horaId");
 
     res.status(200).json(citasPendientes);
   } catch (err) {
@@ -220,4 +348,5 @@ export {
   listarCitasPendientes,
   cancelarCita,
   registrarPeluqueria,
+  registrarEmpleado,
 };

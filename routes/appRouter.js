@@ -11,6 +11,7 @@ import {
   obtenerPeluqueria,
   pagarCita,
   registrarCliente,
+  registrarEmpleado,
   registrarPeluqueria,
   serviciosEmpleado,
 } from "../controllers/controllers.js";
@@ -27,6 +28,10 @@ router.get("/peluquerias/:id", obtenerPeluqueria);
 router.post("/peluquerias/registrar/clienteId", registrarPeluqueria);
 
 // Rutas de Empleados
+router.post(
+  "/peluquerias/:peluqueriaId/empleados/registrar",
+  registrarEmpleado,
+);
 router.get("/peluquerias/:peluqueriaId/empleados", listarEmpleados);
 
 // Ruta horarios de empleados

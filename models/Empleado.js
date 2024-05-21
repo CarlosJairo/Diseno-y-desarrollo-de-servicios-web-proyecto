@@ -7,17 +7,23 @@ const servicioSchema = mongoose.Schema({
   imagen: { type: String, required: true },
 });
 
-const horarioSchema = mongoose.Schema({
-  fecha: {
-    type: Date,
+const horaSchema = mongoose.Schema({
+  hora: {
+    type: String,
     required: true,
   },
-  horas: [
-    {
-      hora: { type: Number, required: true },
-      libre: { type: Boolean, required: true },
-    },
-  ],
+  libre: {
+    type: Boolean,
+    required: true,
+  },
+});
+
+const horarioSchema = mongoose.Schema({
+  fecha: {
+    type: String,
+    required: true,
+  },
+  horas: [{ type: mongoose.Schema.Types.ObjectId, ref: "Hora" }],
 });
 
 const empleadoSchema = mongoose.Schema({
@@ -25,7 +31,7 @@ const empleadoSchema = mongoose.Schema({
   descripcion: { type: String, required: true },
   peluqueriaId: { type: mongoose.Schema.Types.ObjectId, ref: "Peluqueria" },
   clienteId: { type: mongoose.Schema.Types.ObjectId, ref: "Cliente" },
-  fechaIngreso: { type: Date, required: true },
+  fechaIngreso: { type: String, required: true },
   numIdentificacion: { type: String, required: true },
   contactoEmergencia: { type: String, required: true },
   salarioBase: { type: Number, required: true },
@@ -33,10 +39,12 @@ const empleadoSchema = mongoose.Schema({
   servicios: [
     { type: mongoose.Schema.Types.ObjectId, ref: "Servicio", required: true },
   ],
-  horarios: [horarioSchema],
+  horarios: [{ type: mongoose.Schema.Types.ObjectId, ref: "Horario" }],
 });
 
 const Empleado = mongoose.model("Empleado", empleadoSchema);
 const Servicio = mongoose.model("Servicio", servicioSchema);
+const Horario = mongoose.model("Horario", horarioSchema);
+const Hora = mongoose.model("Hora", horaSchema);
 
-export { Empleado, Servicio };
+export { Empleado, Servicio, Horario, Hora };
